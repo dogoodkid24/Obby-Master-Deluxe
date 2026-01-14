@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Obby Master: Deluxe Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; user-select: none; touch-action: none; }
+        canvas { display: block; }
+        
+        .glass {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .neon-text { text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        
+        #joystick-container {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            display: none;
+            touch-action: none;
+        }
+        #joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .anim-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    </style>
+</head>
+<body>
+
+    <!-- Main Menu -->
+    <div id="main-menu" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="glass max-w-md w-full rounded-3xl p-8 text-center text-white shadow-2xl border-t border-white/20">
+            <h1 class="text-5xl font-black mb-2 tracking-tighter italic neon-text">OBBY MASTER</h1>
+            <p class="text-blue-300 mb-8 font-medium">DELUXE EDITION • 20 LEVELS</p>
+            
+            <div class="space-y-4 mb-8">
+                <p class="text-sm uppercase tracking-widest text-gray-400">Wähle deinen Style</p>
+                <div id="color-picker" class="flex justify-center gap-3">
+                    <button class="w-12 h-12 rounded-full border-4 border-white transition-transform hover:scale-110 active:scale-90 bg-red-500 ring-offset-2 ring-offset-black" data-color="#ef4444"></button>
+                    <button class="w-12 h-12 rounded-full border-4 border-transparent transition-transform hover:scale-110 active:scale-90 bg-blue-500" data-color="#3b82f6"></button>
+                    <button class="w-12 h-12 rounded-full border-4 border-transparent transition-transform hover:scale-110 active:scale-90 bg-green-500" data-color="#22c55e"></button>
+                    <button class="w-12 h-12 rounded-full border-4 border-transparent transition-transform hover:scale-110 active:scale-90 bg-yellow-500" data-color="#eab308"></button>
+                    <button class="w-12 h-12 rounded-full border-4 border-transparent transition-transform hover:scale-110 active:scale-90 bg-purple-500" data-color="#a855f7"></button>
+                </div>
+            </div>
+
+            <button id="btn-start" class="w-full bg-white text-black font-bold py-4 rounded-2xl text-xl hover:bg-blue-50 transition-all transform hover:-translate-y-1 shadow-lg active:scale-95">
+                START ABENTEUER
+            </button>
+            <p class="mt-6 text-xs text-gray-500">Benutze WASD oder Pfeiltasten zum Bewegen • Leertaste zum Springen</p>
+        </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="fixed top-0 left-0 w-full p-6 pointer-events-none flex justify-between items-start opacity-0 transition-opacity duration-500">
+        <div class="flex flex-col gap-2">
+            <div class="glass px-5 py-3 rounded-2xl text-white flex items-center gap-4 shadow-xl">
+                <div class="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-2xl animate-bounce">🪙</div>
+                <div>
+                    <div class="text-[10px] uppercase tracking-tighter text-yellow-200 font-bold">Münzen</div>
+                    <div id="coin-count" class="text-2xl font-black leading-none">0</div>
+                </div>
+            </div>
+            <div class="glass px-4 py-2 rounded-xl text-white/70 text-sm font-medium">
+                Level <span id="level-num">1</span>: <span id="level-name">Anfang</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col items-end gap-2 pointer-events-auto">
+            <button id="btn-shop-toggle" class="glass w-14 h-14 rounded-2xl flex items-center justify-center text-2xl hover:bg-white/10 active:scale-90 transition-all">🛒</button>
+            <div id="active-powerups" class="flex flex-col gap-1"></div>
+        </div>
+    </div>
+
+    <!-- Shop -->
+    <div id="shop-panel" class="fixed right-6 top-24 w-72 glass rounded-3xl p-6 text-white hidden z-40 shadow-2xl border border-white/10">
+        <h2 class="text-xl font-black mb-4 flex items-center justify-between">
+            UPGRADES ⚡
+            <span class="text-xs text-yellow-400 font-normal">Klick zum Kaufen</span>
+        </h2>
+        <div class="space-y-3" id="shop-items">
+            <!-- Items injected via JS -->
+        </div>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobile-controls" class="fixed bottom-10 right-10 pointer-events-none hidden">
+        <button id="btn-jump" class="w-24 h-24 glass rounded-full pointer-events-auto flex items-center justify-center text-white font-black active:scale-90 transition-transform shadow-2xl border-2 border-white/20">JUMP</button>
+    </div>
+    <div id="joystick-container">
+        <div id="joystick-knob"></div>
+    </div>
+
+    <!-- Messages -->
+    <div id="msg-container" class="fixed bottom-32 left-1/2 -translate-x-1/2 pointer-events-none z-50 flex flex-col items-center gap-2"></div>
+
+    <script>
+        /** CONSTANTS & CONFIG **/
+        const COLORS = {
+            lava: 0xff3300,
+            finish: 0x00ffcc,
+            platform: 0xffffff,
+            coin: 0xffd700,
+            checkpoint: 0x3b82f6
+        };
+
+        const SHOP_ITEMS = [
+            { id: 'speed', name: 'Speed Coil', icon: '⚡', price: 10, desc: '+50% Geschwindigkeit' },
+            { id: 'gravity', name: 'Gravity Coil', icon: '🌀', price: 15, desc: 'Höhere Sprünge' },
+            { id: 'magnet', name: 'Münz-Magnet', icon: '🧲', price: 20, desc: 'Zieht Münzen an' },
+            { id: 'shield', name: 'Lava-Schild', icon: '🛡️', price: 25, desc: 'Einmaliger Schutz' }
+        ];
+
+        /** GAME STATE **/
+        let scene, camera, renderer, clock;
+        let player, playerPivot, head, body;
+        let isPlaying = false, currentLevel = 0, coins = 0;
+        let platforms = [], coinsObjects = [], hazards = [], checkpoints = [], decorations = [];
+        let moveDir = new THREE.Vector3(), velocity = new THREE.Vector3();
+        let isGrounded = false, lastCheckpoint = new THREE.Vector3(0, 2, 0);
+        let activePowerups = new Set();
+        let keys = {}, touchJoystick = { active: false, x: 0, y: 0 };
+        let currentLevelData = null;
+
+        /** INITIALIZATION **/
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.Fog(0x87ceeb, 50, 300);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            // Lights
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambient);
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+            sun.position.set(50, 100, 50);
+            sun.castShadow = true;
+            sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
+            sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
+            scene.add(sun);
+
+            createPlayer();
+            setupEvents();
+            renderShop();
+            
+            // Background rotation while in menu
+            animate();
+        }
+
+        function createPlayer() {
+            playerPivot = new THREE.Group();
+            
+            const mat = new THREE.MeshPhongMaterial({ color: 0xef4444 });
+            body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1, 0.4), mat);
+            body.position.y = 1;
+            body.castShadow = true;
+            playerPivot.add(body);
+
+            head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshPhongMaterial({ color: 0xffdbac }));
+            head.position.y = 1.8;
+            head.castShadow = true;
+            playerPivot.add(head);
+
+            // Limbs for animation
+            const limbGeo = new THREE.BoxGeometry(0.25, 0.6, 0.25);
+            playerPivot.leftLeg = new THREE.Mesh(limbGeo, mat);
+            playerPivot.leftLeg.position.set(-0.25, 0.3, 0);
+            playerPivot.add(playerPivot.leftLeg);
+
+            playerPivot.rightLeg = new THREE.Mesh(limbGeo, mat);
+            playerPivot.rightLeg.position.set(0.25, 0.3, 0);
+            playerPivot.add(playerPivot.rightLeg);
+
+            playerPivot.position.set(0, 5, 0);
+            scene.add(playerPivot);
+            player = playerPivot;
+        }
+
+        /** LEVEL SYSTEM **/
+        const LEVELS = Array.from({ length: 20 }, (_, i) => ({
+            name: `Level ${i + 1}`,
+            difficulty: i / 19,
+            skyColor: new THREE.Color().setHSL(0.5 + (i * 0.05) % 1, 0.7, 0.7)
+        }));
+
+        function generateLevel(idx) {
+            // Clear old
+            [...platforms, ...coinsObjects, ...hazards, ...checkpoints, ...decorations].forEach(o => scene.remove(o));
+            platforms = []; coinsObjects = []; hazards = []; checkpoints = []; decorations = [];
+
+            const data = LEVELS[idx];
+            currentLevelData = data;
+            scene.background = data.skyColor;
+            scene.fog.color = data.skyColor;
+
+            // Start Platform
+            addPlatform(0, 0, 0, 8, 1, 8, COLORS.platform);
+
+            // Procedural Obstacles based on Level Index
+            let currentPos = new THREE.Vector3(0, 0, -10);
+            const segmentCount = 5 + Math.floor(idx / 2);
+            
+            for (let s = 0; s < segmentCount; s++) {
+                const type = Math.floor(Math.random() * (idx > 5 ? 5 : 3)); // Unlock harder types
+                
+                switch(type) {
+                    case 0: // Basic jump
+                        addPlatform(currentPos.x, currentPos.y, currentPos.z, 4, 1, 4);
+                        if (Math.random() > 0.5) addCoin(currentPos.x, currentPos.y + 1.5, currentPos.z);
+                        currentPos.z -= 10;
+                        break;
+                    case 1: // Moving platform
+                        const moveAxis = Math.random() > 0.5 ? 'x' : 'z';
+                        addPlatform(currentPos.x, currentPos.y, currentPos.z, 4, 0.5, 4, 0xaaaaaa, { axis: moveAxis, range: 6, speed: 0.02 + (idx * 0.005) });
+                        currentPos.z -= 12;
+                        break;
+                    case 2: // Stairs
+                        for(let i=0; i<3; i++) {
+                            addPlatform(currentPos.x + (i*2), currentPos.y + i, currentPos.z - (i*5), 3, 0.5, 3);
+                        }
+                        currentPos.x += 4; currentPos.y += 2; currentPos.z -= 15;
+                        break;
+                    case 3: // Vanishing blocks
+                        addPlatform(currentPos.x, currentPos.y, currentPos.z, 3, 0.5, 3, 0xff00ff, { vanishing: true });
+                        currentPos.z -= 10;
+                        break;
+                    case 4: // Spinning beam
+                        addPlatform(currentPos.x, currentPos.y, currentPos.z, 12, 0.5, 1, 0x333333, { rotation: 0.04 + (idx * 0.002) });
+                        currentPos.z -= 12;
+                        break;
+                }
+
+                // Intermediate Checkpoint every 4 segments
+                if (s > 0 && s % 4 === 0) {
+                    addPlatform(currentPos.x, currentPos.y, currentPos.z, 6, 1, 6, 0x333333);
+                    addCheckpoint(currentPos.x, currentPos.y + 0.6, currentPos.z);
+                    currentPos.z -= 10;
+                }
+            }
+
+            // Finish Platform
+            addPlatform(currentPos.x, currentPos.y, currentPos.z, 10, 1, 10, COLORS.finish, { isFinish: true });
+            
+            // Lava Floor
+            const lava = new THREE.Mesh(
+                new THREE.PlaneGeometry(1000, 1000),
+                new THREE.MeshPhongMaterial({ color: COLORS.lava, emissive: 0x440000, transparent: true, opacity: 0.8 })
+            );
+            lava.rotation.x = -Math.PI / 2;
+            lava.position.y = -10;
+            hazards.push(lava);
+            scene.add(lava);
+
+            // Reset Player
+            player.position.set(0, 2, 0);
+            lastCheckpoint.set(0, 2, 0);
+            velocity.set(0,0,0);
+        }
+
+        function addPlatform(x, y, z, w, h, d, color = 0xffffff, props = {}) {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshPhongMaterial({ color }));
+            mesh.position.set(x, y, z);
+            mesh.receiveShadow = true;
+            mesh.castShadow = true;
+            mesh.userData = props;
+            if (props.vanishing) mesh.userData.state = 1;
+            platforms.push(mesh);
+            scene.add(mesh);
+            return mesh;
+        }
+
+        function addCoin(x, y, z) {
+            const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.1, 12), new THREE.MeshPhongMaterial({ color: COLORS.coin, emissive: 0x443300 }));
+            coin.position.set(x, y, z);
+            coin.rotation.x = Math.PI / 2;
+            coinsObjects.push(coin);
+            scene.add(coin);
+        }
+
+        function addCheckpoint(x, y, z) {
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2), new THREE.MeshPhongMaterial({ color: 0x555555 }));
+            pole.position.set(x, y, z + 1);
+            const flag = new THREE.Mesh(new THREE.BoxGeometry(1, 0.6, 0.05), new THREE.MeshPhongMaterial({ color: COLORS.checkpoint }));
+            flag.position.set(x + 0.5, y + 0.7, z + 1);
+            const group = new THREE.Group();
+            group.add(pole); group.add(flag);
+            group.position.set(x, y, z);
+            checkpoints.push(group);
+            scene.add(group);
+        }
+
+        /** MECHANICS **/
+        function update(delta) {
+            if (!isPlaying) return;
+
+            // Input handling
+            moveDir.set(0, 0, 0);
+            let speed = activePowerups.has('speed') ? 18 : 12;
+            let jumpForce = activePowerups.has('gravity') ? 0.35 : 0.22;
+
+            if (keys['KeyW'] || keys['ArrowUp']) moveDir.z -= 1;
+            if (keys['KeyS'] || keys['ArrowDown']) moveDir.z += 1;
+            if (keys['KeyA'] || keys['ArrowLeft']) moveDir.x -= 1;
+            if (keys['KeyD'] || keys['ArrowRight']) moveDir.x += 1;
+
+            if (touchJoystick.active) {
+                moveDir.x = touchJoystick.x;
+                moveDir.z = touchJoystick.y;
+            }
+
+            if (moveDir.length() > 0) {
+                moveDir.normalize();
+                // Simple character rotation
+                const targetRot = Math.atan2(moveDir.x, moveDir.z);
+                body.rotation.y = THREE.MathUtils.lerp(body.rotation.y, targetRot, 0.15);
+                
+                player.position.addScaledVector(moveDir, speed * delta);
+
+                // Animation
+                const t = clock.getElapsedTime() * (speed / 2);
+                player.leftLeg.rotation.x = Math.sin(t) * 0.5;
+                player.rightLeg.rotation.x = -Math.sin(t) * 0.5;
+            } else {
+                player.leftLeg.rotation.x = 0;
+                player.rightLeg.rotation.x = 0;
+            }
+
+            // Gravity
+            velocity.y -= 0.6 * delta;
+            player.position.y += velocity.y;
+
+            if ((keys['Space'] || keys['jump']) && isGrounded) {
+                velocity.y = jumpForce;
+                isGrounded = false;
+            }
+
+            // Collisions
+            checkCollisions();
+
+            // Special platform logic
+            platforms.forEach(p => {
+                if (p.userData.axis) {
+                    const offset = Math.sin(clock.getElapsedTime() * p.userData.speed * 10) * p.userData.range;
+                    if (p.userData.axis === 'x') p.position.x = offset;
+                    else p.position.z = offset;
+                }
+                if (p.userData.rotation) {
+                    p.rotation.y += p.userData.rotation;
+                }
+                if (p.userData.vanishing) {
+                    const cycle = Math.sin(clock.getElapsedTime() * 3);
+                    p.material.opacity = THREE.MathUtils.clamp(cycle + 0.5, 0, 1);
+                    p.material.transparent = true;
+                    p.userData.active = p.material.opacity > 0.4;
+                }
+            });
+
+            // Camera follow
+            const camTarget = player.position.clone().add(new THREE.Vector3(0, 8, 12));
+            camera.position.lerp(camTarget, 0.1);
+            camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+
+            // Bounds
+            if (player.position.y < -15) die();
+        }
+
+        function checkCollisions() {
+            const playerBox = new THREE.Box3().setFromCenterAndSize(
+                player.position.clone().add(new THREE.Vector3(0, 1, 0)),
+                new THREE.Vector3(0.8, 2, 0.8)
+            );
+
+            isGrounded = false;
+            platforms.forEach(p => {
+                if (p.userData.vanishing && !p.userData.active) return;
+                
+                const pBox = new THREE.Box3().setFromObject(p);
+                if (playerBox.intersectsBox(pBox)) {
+                    // Floor collision
+                    if (velocity.y <= 0 && player.position.y >= p.position.y + (p.geometry.parameters.height/2) - 0.2) {
+                        player.position.y = p.position.y + (p.geometry.parameters.height/2);
+                        velocity.y = 0;
+                        isGrounded = true;
+
+                        if (p.userData.isFinish) winLevel();
+                    }
+                }
+            });
+
+            // Coins
+            for (let i = coinsObjects.length - 1; i >= 0; i--) {
+                const c = coinsObjects[i];
+                c.rotation.y += 0.05;
+                
+                const dist = player.position.distanceTo(c.position);
+                const magnetDist = activePowerups.has('magnet') ? 8 : 1.5;
+
+                if (dist < magnetDist) {
+                    c.position.lerp(player.position.clone().add(new THREE.Vector3(0, 1, 0)), 0.2);
+                }
+
+                if (dist < 1.2) {
+                    scene.remove(c);
+                    coinsObjects.splice(i, 1);
+                    collectCoin();
+                }
+            }
+
+            // Checkpoints
+            checkpoints.forEach(cp => {
+                if (player.position.distanceTo(cp.position) < 3) {
+                    if (lastCheckpoint.distanceTo(cp.position) > 1) {
+                        lastCheckpoint.copy(cp.position).add(new THREE.Vector3(0, 1, 0));
+                        cp.children[1].material.color.set(0x22c55e);
+                        message("Kontrollpunkt erreicht!", "blue");
+                    }
+                }
+            });
+        }
+
+        /** UI & FLOW **/
+        function setupEvents() {
+            window.addEventListener('keydown', e => keys[e.code] = true);
+            window.addEventListener('keyup', e => keys[e.code] = false);
+            window.addEventListener('resize', onWindowResize);
+
+            document.getElementById('btn-start').onclick = () => {
+                document.getElementById('main-menu').classList.add('hidden');
+                document.getElementById('hud').classList.remove('opacity-0');
+                isPlaying = true;
+                generateLevel(0);
+            };
+
+            document.querySelectorAll('#color-picker button').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('#color-picker button').forEach(b => b.classList.remove('border-white'));
+                    btn.classList.add('border-white');
+                    body.material.color.set(btn.dataset.color);
+                    playerPivot.leftLeg.material.color.set(btn.dataset.color);
+                    playerPivot.rightLeg.material.color.set(btn.dataset.color);
+                };
+            });
+
+            document.getElementById('btn-shop-toggle').onclick = () => {
+                const panel = document.getElementById('shop-panel');
+                panel.classList.toggle('hidden');
+            };
+
+            // Mobile jump
+            const btnJump = document.getElementById('btn-jump');
+            btnJump.onmousedown = () => keys['jump'] = true;
+            btnJump.onmouseup = () => keys['jump'] = false;
+            btnJump.ontouchstart = (e) => { e.preventDefault(); keys['jump'] = true; };
+            btnJump.ontouchend = (e) => { e.preventDefault(); keys['jump'] = false; };
+            
+            if ('ontouchstart' in window) {
+                document.getElementById('mobile-controls').classList.remove('hidden');
+                initJoystick();
+            }
+        }
+
+        function initJoystick() {
+            const container = document.getElementById('joystick-container');
+            const knob = document.getElementById('joystick-knob');
+            container.style.display = 'block';
+
+            container.ontouchstart = (e) => {
+                touchJoystick.active = true;
+                handleJoystick(e);
+            };
+            window.ontouchmove = (e) => {
+                if (touchJoystick.active) handleJoystick(e);
+            };
+            window.ontouchend = () => {
+                touchJoystick.active = false;
+                touchJoystick.x = 0;
+                touchJoystick.y = 0;
+                knob.style.left = '50%';
+                knob.style.top = '50%';
+            };
+
+            function handleJoystick(e) {
+                const rect = container.getBoundingClientRect();
+                const touch = e.touches[0];
+                let dx = touch.clientX - (rect.left + rect.width / 2);
+                let dy = touch.clientY - (rect.top + rect.height / 2);
+                const dist = Math.min(60, Math.sqrt(dx*dx + dy*dy));
+                const angle = Math.atan2(dy, dx);
+                
+                touchJoystick.x = (Math.cos(angle) * dist) / 60;
+                touchJoystick.y = (Math.sin(angle) * dist) / 60;
+                
+                knob.style.left = 50 + (touchJoystick.x * 40) + '%';
+                knob.style.top = 50 + (touchJoystick.y * 40) + '%';
+            }
+        }
+
+        function collectCoin() {
+            coins++;
+            document.getElementById('coin-count').innerText = coins;
+            // Floating text
+            message("+1 🪙", "yellow");
+        }
+
+        function renderShop() {
+            const container = document.getElementById('shop-items');
+            container.innerHTML = SHOP_ITEMS.map(item => `
+                <button onclick="buyItem('${item.id}', ${item.price})" class="w-full glass p-3 rounded-2xl flex items-center gap-3 hover:bg-white/10 text-left transition-all active:scale-95 group">
+                    <div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">${item.icon}</div>
+                    <div class="flex-1">
+                        <div class="font-bold text-sm">${item.name}</div>
+                        <div class="text-[10px] text-gray-400 uppercase">${item.desc}</div>
+                    </div>
+                    <div class="font-black text-yellow-400">${item.price}🪙</div>
+                </button>
+            `).join('');
+        }
+
+        window.buyItem = (id, price) => {
+            if (coins >= price) {
+                coins -= price;
+                document.getElementById('coin-count').innerText = coins;
+                activePowerups.add(id);
+                updatePowerupUI();
+                message(`${id.toUpperCase()} AKTIVIERT!`, "green");
+            } else {
+                message("Nicht genug Münzen!", "red");
+            }
+        };
+
+        function updatePowerupUI() {
+            const container = document.getElementById('active-powerups');
+            container.innerHTML = [...activePowerups].map(p => {
+                const item = SHOP_ITEMS.find(i => i.id === p);
+                return `<div class="glass px-3 py-1 rounded-full text-[10px] font-bold text-blue-300 flex items-center gap-1">
+                    <span>${item.icon}</span> ${item.name}
+                </div>`;
+            }).join('');
+        }
+
+        function message(text, color) {
+            const el = document.createElement('div');
+            el.className = `glass px-6 py-2 rounded-full text-sm font-bold shadow-2xl animate-bounce border-2 border-${color}-400/50 text-white`;
+            el.innerText = text;
+            document.getElementById('msg-container').appendChild(el);
+            setTimeout(() => el.remove(), 2000);
+        }
+
+        function die() {
+            if (activePowerups.has('shield')) {
+                activePowerups.delete('shield');
+                updatePowerupUI();
+                player.position.copy(lastCheckpoint);
+                message("Schild verbraucht!", "purple");
+                return;
+            }
+            player.position.copy(lastCheckpoint);
+            velocity.set(0,0,0);
+            message("Ouch! Zurück zum Checkpoint.", "red");
+        }
+
+        function winLevel() {
+            if (currentLevel < 19) {
+                currentLevel++;
+                document.getElementById('level-num').innerText = currentLevel + 1;
+                document.getElementById('level-name').innerText = LEVELS[currentLevel].name;
+                generateLevel(currentLevel);
+                message("LEVEL GESCHAFFT! 🚀", "green");
+            } else {
+                isPlaying = false;
+                document.getElementById('main-menu').classList.remove('hidden');
+                document.getElementById('main-menu').querySelector('h1').innerText = "OBBY MEISTER!";
+                document.getElementById('main-menu').querySelector('p').innerText = "Du hast alle 20 Level gemeistert!";
+                document.getElementById('btn-start').innerText = "ERNEUT SPIELEN";
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            update(delta);
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
